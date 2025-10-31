@@ -6,6 +6,14 @@ static const uint32_t DEBOUNCE_MILLIS = 50;
 static bool waitingForRelease = false;
 static buttonType buttonDownType = NO_PRESS;
 
+/*
+
+  readSmoothedADC() - Averages ADC input of buttons for increased accuracy.
+
+  returns int - Average voltage across 5 samples.
+
+*/
+
 static int readSmoothedADC() {
   long sum = 0;
   for (int i = 0; i < ADC_SAMPLES; ++i) {
@@ -13,6 +21,16 @@ static int readSmoothedADC() {
   }
   return (int)(sum / ADC_SAMPLES);
 }
+
+/*
+
+  getButtonType() - Function that returns pressed button based on voltage value.
+
+  int voltage - Voltage measured by ADC button pin.
+
+  returns buttonType - buttonType struct corresponding to pressed button. 
+
+*/
 
 buttonType getButtonType(int voltage) {
 
@@ -23,6 +41,15 @@ buttonType getButtonType(int voltage) {
   return NO_PRESS;
 
 }
+
+/*
+
+  getButtonEvent() - Function to check for button events. Uses buttonReturn struct 
+  to store both button and its event for use.
+
+  returns buttonReturn - buttoReturn struct holding button type and button event.
+
+*/
 
 buttonReturn getButtonEvent(){
 

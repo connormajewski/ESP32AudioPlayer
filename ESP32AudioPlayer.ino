@@ -34,13 +34,13 @@ void playTest(const char* path) {
   
 }
 
-void normalizeTest(const char * path){
+void normalizeTest(const char * path, double n){
 
   char temp[64];
 
   snprintf(temp, sizeof(temp), "/%s", path);
 
-  normalizeMonoWAVFile(SD_MMC, temp, 1.0); 
+  normalizeMonoWAVFile(SD_MMC, temp, n); 
 
 }
 
@@ -221,19 +221,6 @@ void setup(){
     lcd.init();
     lcd.backlight();
 
-    filepathsIndex = 0;
-
-    lcd.setCursor(0,0);
-    lcd.print("> ");
-    lcd.print(filepaths[filepathsIndex].c_str());
-
-    if(filepathsIndex < filepaths.size() - 1){
-
-      lcd.setCursor(0,1);
-      lcd.print(filepaths[filepathsIndex + 1].c_str());
-
-    }
-
     // for(const auto &filepath: filepaths){
 
     //   clear(lcd);
@@ -249,9 +236,22 @@ void setup(){
 
     //   snprintf(temp, sizeof(temp), "/%s", path);
 
-    //   normalizeMonoWAVFile(SD_MMC, temp, 0.1);
+    //   normalizeMonoWAVFile(SD_MMC, temp, 0.05);
 
     // }
+
+    filepathsIndex = 0;
+
+    lcd.setCursor(0,0);
+    lcd.print("> ");
+    lcd.print(filepaths[filepathsIndex].c_str());
+
+    if(filepathsIndex < filepaths.size() - 1){
+
+      lcd.setCursor(0,1);
+      lcd.print(filepaths[filepathsIndex + 1].c_str());
+
+    }
 
 
   }
@@ -275,7 +275,7 @@ void loop(){
 
       case BUTTON_1:
         playTest(filepaths[filepathsIndex].c_str());
-        //normalizeTest(filepaths[filepathsIndex].c_str());
+        //normalizeTest(filepaths[filepathsIndex].c_str(), 0.02);
         Serial.println("BUTTON 1"); 
         break;
       case BUTTON_3: 

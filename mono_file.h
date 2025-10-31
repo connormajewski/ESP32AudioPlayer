@@ -19,12 +19,21 @@
   41-44   DATA_SECTION_SIZE
 */
 
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
 #include <math.h>
+
+/*
+
+  Functions for mono WAV file IO, editing, and playback. 
+  
+  Uses sd_read_write.h and i2s.h for SD and playback. 
+
+*/
 
 #include "sd_read_write.h"
 
@@ -33,6 +42,14 @@
 #ifndef M_TWO_PI
 #define M_TWO_PI (2.00 * M_PI)
 #endif
+
+/*
+
+  MonoWAVHeader struct. 
+
+  This information HAS to be written to beginning of WAV file in order for it to be recognized.
+
+*/
 
 struct __attribute__((packed)) MonoWAVHeader {
 
@@ -58,9 +75,14 @@ void createMonoWAVFile(fs::FS &fs, const char * path, uint32_t num_samples, uint
 void writeSineWave(fs::FS &fs, const char * path, float freq, float duration);
 void editMonoWAVHeader(fs::FS &fs, const char * path, uint32_t num_samples, uint32_t sample_rate, uint16_t bits_per_sample);
 void normalizeMonoWAVFile(fs::FS &fs, const char * path, double normalization);
-double rootMeanSquare(fs::FS &fs, const char * path);
-//Need to add
-
 void printMonoWAVData(fs::FS &fs, const char * path);
+
+// Playback specific functions.
+
 void playMonoWAVFile(fs::FS &fs, const char * path);
+
+// Helper functions.
+
+double rootMeanSquare(fs::FS &fs, const char * path);
+
 #endif

@@ -1,5 +1,7 @@
 #include "sd_read_write.h"
 
+// Initialization function for SD card. This needs to be called before any other SD functions can be used. Should be caled in setup().
+
 int SDInit(){
 
 	SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0);
@@ -24,6 +26,8 @@ int SDInit(){
 	
 }
 
+// Print general infor about SD card. 
+
 void SDInfo(){
 	
 	uint8_t cardType = SD_MMC.cardType();
@@ -42,6 +46,7 @@ void SDInfo(){
 	
 }
 
+// List all files/dir in given directory.
 
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
   Serial.printf("Listing directory: %s\n", dirname);
@@ -74,6 +79,15 @@ void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
   }
 
 }
+
+/*
+
+  Similar to listDir(), but returns a vector of filepaths.
+
+  Returned filepaths DO NOT have root directory appended, i.e. "/test.wav"
+  will return as "test.wav".
+
+*/
 
 std::vector<String> getDirFilePaths(fs::FS &fs, const char * dirname){
 
@@ -112,6 +126,8 @@ std::vector<String> getDirFilePaths(fs::FS &fs, const char * dirname){
   return filepaths;
 
 }
+
+// General file/dir IO functions.
 
 void createDir(fs::FS &fs, const char *path) {
   Serial.printf("Creating Dir: %s\n", path);
@@ -161,53 +177,6 @@ void writeFile(fs::FS &fs, const char *path, const char *message) {
   }
 }
 
-void writeFileFormatString(fs::FS &fs, const char * path, const char * message, ...){
-
-    char * traversal;
-    char * string;
-
-    unsigned int i;
-    double d;
-
-    va_list arg;
-    va_start(arg, message);
-
-    for(int j=0;message[j] != '\0';j++){
-
-      if(message[j] == '%'){
-
-        j++;
-
-        if(message[j] == 'd'){
-
-          i = va_arg(arg, int);
-
-          if(i < 0){
-
-            i = -i;
-
-            writeFile(fs, path, "-");
-
-          }
-
-          writeFile(fs, path, intToString(i,10));
-
-        }
-
-      }
-
-      else{
-
-        writeFile(fs, path, (char *)message[j]);
-
-      }
-
-    }
-
-    va_end(arg);
-
-}
-
 void appendFile(fs::FS &fs, const char *path, const char *message) {
   Serial.printf("Appending to file: %s\n", path);
 
@@ -239,73 +208,4 @@ void deleteFile(fs::FS &fs, const char *path) {
   } else {
     Serial.println("Delete failed");
   }
-}
-
-void testFileIO(fs::FS &fs, const char *path) {
-  File file = fs.open(path);
-  static uint8_t buf[512];
-  size_t len = 0;
-  uint32_t start = millis();
-  uint32_t end = start;
-  if (file) {
-    len = file.size();
-    size_t flen = len;
-    start = millis();
-    while (len) {
-      size_t toRead = len;
-      if (toRead > 512) {
-        toRead = 512;
-      }
-      file.read(buf, toRead);
-      len -= toRead;
-    }
-    end = millis() - start;
-    Serial.printf("%u bytes read for %u ms\r\n", flen, end);
-    file.close();
-  } else {
-    Serial.println("Failed to open file for reading");
-  }
-
-  file = fs.open(path, FILE_WRITE);
-  if (!file) {
-    Serial.println("Failed to open file for writing");
-    return;
-  }
-
-  size_t i;
-  start = millis();
-  for (i = 0; i < 2048; i++) {
-    file.write(buf, 512);
-  }
-  end = millis() - start;
-  Serial.printf("%u bytes written for %u ms\n", 2048 * 512, end);
-  file.close();
-}
-
-
-
-
-
-char * intToString(unsigned int num, int base){
-
-  static char nums[] = "0123456789";
-
-  static char buffer[50];
-
-  char * ptr;
-
-  ptr = &buffer[49];
-
-  *ptr = '\0';
-
-  do{
-
-      *--ptr = nums[num % base];
-
-      num /= base;
-
-  } while(num != 0);
-
-  return ptr;
-
 }

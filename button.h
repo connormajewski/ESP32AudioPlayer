@@ -3,6 +3,23 @@
 
 #include <Arduino.h>
 
+/*
+
+  This is used to capture button input to a single ADC input pin.
+
+  Buttons are attatched to single pin with resistors. 
+
+  If using different resistors, BUTTON_X_VOLTAGE values need to be recalculated.
+
+  ADC_SAMPLES and VOLTAGE_RANGE is used to account for fluctuating voltage values.
+
+  buttonReturn struct contains:
+
+    buttonEvent - Button state.
+    buttonType - BUtton type.
+
+*/
+
 #define BUTTON_PIN 32
 
 #define BUTTON_1_VOLTAGE 4050

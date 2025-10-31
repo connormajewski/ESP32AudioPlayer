@@ -1,5 +1,13 @@
 #include "i2s.h"
 
+/*
+
+  I2SInit() - Initialize and set I2S modes.
+
+  One i2s_config struct for audio capture, and one for audio playback.
+
+*/
+
 void I2SInit(){
 
   i2s_config_t i2s_config = {
@@ -54,9 +62,17 @@ void I2SInit(){
   i2s_set_pin(I2S_NUM_1, &playback_pins);
   i2s_zero_dma_buffer(I2S_NUM_1);
 
-  
-
 }
+
+/*
+
+  generateSineWave() - Function that generates sine wave, to then be sent through I2S.
+
+  double freq - Frequency of generated wave;
+  double duration - Duration of generated wave, in seconds.
+  float amplitude - Amplitude of generated wave.
+
+*/
 
 void generateSineWave(double freq, double duration, float amplitude){
 

@@ -3,6 +3,14 @@
 
 /*
 
+	Pinout and initalization for I2S.
+
+	Used for audio playback and capture.
+
+*/
+
+/*
+
 	PIN CONNECTION FOR AUDIO CONVERTER
 	BCK -> 27
 	DIN -> 26
