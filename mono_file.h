@@ -76,6 +76,7 @@ void writeSineWave(fs::FS &fs, const char * path, float freq, float duration);
 void editMonoWAVHeader(fs::FS &fs, const char * path, uint32_t num_samples, uint32_t sample_rate, uint16_t bits_per_sample);
 void normalizeMonoWAVFile(fs::FS &fs, const char * path, double normalization);
 void printMonoWAVData(fs::FS &fs, const char * path);
+void record(fs::FS &fs, const char * path, double duration);
 
 // Playback specific functions.
 

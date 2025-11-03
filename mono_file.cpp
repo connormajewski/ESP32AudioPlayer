@@ -244,10 +244,6 @@ void playMonoWAVFile(fs::FS &fs, const char * path){
 
     samples = (int16_t*)buffer;
 
-    // for(size_t i = 0; i < sampleCount; i++){
-    //     samples[i] = (samples[i] * 1.0); // halve amplitude
-    // }
-
     i2s_write(I2S_NUM_1, buffer, bytes_read, &bytes_written, portMAX_DELAY);
 
   }
@@ -415,5 +411,74 @@ double rootMeanSquare(fs::FS &fs, const char * path){
   file.close();
 
   return rms;
+
+}
+
+void record(fs::FS &fs, const char * path, double duration){
+
+  i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_4); // for example, GPIO32 = ADC1_CH4
+  i2s_adc_enable(I2S_NUM_0);
+
+  size_t bytesTotal = 0;
+
+  createMonoWAVFile(fs, path, 44100 * duration, 44100, 16);
+
+  File file = SD_MMC.open(path, FILE_WRITE);
+
+  file.seek(44);
+
+  const int BUF_LEN = 256;
+  uint16_t buffer[BUF_LEN];
+  int16_t buffer16[BUF_LEN];
+
+  size_t bytesRead;
+
+  while(bytesTotal < 44100 * 2 * duration){
+
+    i2s_read(I2S_NUM_0, (void*)buffer, sizeof(buffer), &bytesRead, portMAX_DELAY);
+
+    int numSamples = bytesRead / 2;
+
+    for (int i = 0; i < numSamples; i++) {
+
+      int16_t sample12 = buffer[i] & 0x0FFF;  
+      int16_t sample16 = ((int32_t)sample12 - 2048) << 4;
+
+      int32_t amp = sample16 * 2.00;
+
+      if (amp > 32767) amp = 32767;
+      if (amp < -32768) amp = -32768;
+      buffer16[i] = amp; 
+
+    }
+
+    static float prev = 0;
+    float alpha = 0.995;
+    for (int i = 0; i < numSamples; i++) {
+      float s = buffer16[i];
+      float filtered = s - prev;
+      prev = alpha * s + (1.0 - alpha) * prev;
+
+      if (filtered > 32767) filtered = 32767;
+      if (filtered < -32768) filtered = -32768;
+
+      buffer16[i] = (int16_t)filtered;
+    }
+
+    // Write directly to SD
+    file.write((uint8_t*)buffer16, numSamples * 2);
+
+    bytesTotal += numSamples * 2;
+
+
+  }
+
+  file.close();
+
+  editMonoWAVHeader(SD_MMC, path, 44100 * duration, 44100, 16);
+
+  Serial.println("DONE.");
+
+  return;
 
 }

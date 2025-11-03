@@ -6,194 +6,88 @@
 #include "i2s.h"
 #include "button.h"
 
-int voltage = 0;
+// This vector is used to traverse files in given directory. Used for selecting audio.
 
 std::vector<String> filepaths;
+int filepathsIndex;
+
+int isPaused = 1;
+
+// Seperate from filepathsIndex. When a file is played, this is set, then compared against filepathsIndex to check if selection has changed.
+
+int currentFileIndex = -1;
+
+File currentFile;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-int filepathsIndex;
+// audioTask specific variables. Copy of variables in playMonoWAVFile() in mono_file.cpp.
+
+size_t bytes_read;
+size_t bytes_written;
+uint16_t buffer[512];
+int16_t *samples;
+size_t sampleCount;
+
+// Attatch audio playback to seperate core to eliminate audio loss when reading button events.
+
+void audioTask(void *parameters) {
+  while (true) {
+
+    if (!isPaused && currentFile && currentFile.available()) {
+
+      bytes_read = currentFile.read((uint8_t *)buffer, sizeof(buffer));
+
+      if (bytes_read > 0) {
+        i2s_write(I2S_NUM_1, buffer, bytes_read, &bytes_written, portMAX_DELAY);
+      } else {
+        currentFile.close();
+      }
+
+    }
+
+    vTaskDelay(1);
+  }
+
+}
+
+// Quick function to "clear" lcd by overwriting with spaces.
+// Used when moving through filepaths.
 
 void clear(LiquidCrystal_I2C &lcd) {
-    lcd.setCursor(0, 0);      
-    lcd.print("                ");
-    lcd.setCursor(0, 1);      
-    lcd.print("                ");          
-    lcd.setCursor(0, 0);      
-}
 
-void playTest(const char* path) {
-
-  //Serial.printf("Playing %s\n", path);
-
-  char temp[64];
-
-  snprintf(temp, sizeof(temp), "/%s", path);
-
-  playMonoWAVFile(SD_MMC, temp);
-  
-}
-
-void normalizeTest(const char * path, double n){
-
-  char temp[64];
-
-  snprintf(temp, sizeof(temp), "/%s", path);
-
-  normalizeMonoWAVFile(SD_MMC, temp, n); 
+  lcd.setCursor(0, 0);
+  lcd.print("                ");
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
+  lcd.setCursor(0, 0);
 
 }
 
-void monoWAVTest(){
+// This is a helper function to normalize audio files to some level, i.e. 0.05. EXTREMELY SLOW.
 
-  Serial.println("TESTING mono_file SD functionality.");
+void normalizeAllFiles(std::vector<String> filepaths, double normalization) {
 
-  listDir(SD_MMC, "/", 0);
+  for (const auto &filepath : filepaths) {
 
-  Serial.println("Writing 5.wav.");
+    clear(lcd);
 
-  writeSineWave(SD_MMC, "/5.wav", 261.63, 5.00);
+    lcd.setCursor(0, 0);
+    lcd.print("Normalizing...");
+    lcd.setCursor(0, 1);
+    lcd.print(filepath.c_str());
 
-  printMonoWAVData(SD_MMC, "/5.wav");
+    const char *path = filepath.c_str();
 
-  Serial.println("Writing 10.wav.");
+    char temp[64];
 
-  writeSineWave(SD_MMC, "/10.wav", 392.00, 10.00);
+    snprintf(temp, sizeof(temp), "/%s", path);
 
-  printMonoWAVData(SD_MMC, "/10.wav");
-
-  Serial.println("Writing 7.wav.");
-
-  writeSineWave(SD_MMC, "/7.wav", 329.23, 7.00);
-
-  printMonoWAVData(SD_MMC, "/7.wav");
-
-  listDir(SD_MMC, "/", 0);
-
-  Serial.println("Testing sine wave generation...");
-
-  for(int i=3;i>0;i--){
-
-    Serial.println(i);
-
+    normalizeMonoWAVFile(SD_MMC, temp, normalization);
   }
-
-  generateSineWave(261.63, 1.00, 1.00);
-  generateSineWave(329.628, 1.00, 0.8);
-  generateSineWave(392, 1.00, 0.6);
-  generateSineWave(329.628, 1.00, 0.4);
-  generateSineWave(261.63, 1.00, 0.2);
-
-  Serial.println("Testing playing from file.");
-
-  int i;
-
-  for(i=3;i>0;i--){
-
-    Serial.println(i);
-
-    delay(1000);
-
-  }
-
-  Serial.println("Playing 5.wav");
-
-  playMonoWAVFile(SD_MMC, "/5.wav");
-
-  Serial.println("Playing 10.wav");
-
-  playMonoWAVFile(SD_MMC, "/10.wav");
-
-  Serial.println("Playing 7.wav");
-
-  playMonoWAVFile(SD_MMC, "/7.wav");
-
-  Serial.println("Playing song.");
-
-  for(int i=3;i>0;i--) {
-    
-    Serial.println(i);
-
-    delay(1000);
-
-  }
-
-  playTest("/anima.wav");
-
 }
 
-void record(const char * path, double duration){
-
-  i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_4); // for example, GPIO32 = ADC1_CH4
-  i2s_adc_enable(I2S_NUM_0);
-
-  size_t bytesTotal = 0;
-
-  createMonoWAVFile(SD_MMC, path, 44100 * duration, 44100, 16);
-
-  File file = SD_MMC.open(path, FILE_WRITE);
-
-  file.seek(44);
-
-  const int BUF_LEN = 256;
-  uint16_t buffer[BUF_LEN];
-  int16_t buffer16[BUF_LEN];
-
-  size_t bytesRead;
-
-  while(bytesTotal < 44100 * 2 * duration){
-
-    //printf("%d/%.2f\n",bytesTotal, 44100 * 2 * duration);
-
-    // Read raw ADC samples via I2S
-    i2s_read(I2S_NUM_0, (void*)buffer, sizeof(buffer), &bytesRead, portMAX_DELAY);
-
-    int numSamples = bytesRead / 2;
-
-    for (int i = 0; i < numSamples; i++) {
-      int16_t sample12 = buffer[i] & 0x0FFF;  
-      int16_t sample16 = ((int32_t)sample12 - 2048) << 4;
-
-      int32_t amp = sample16 * 2.00;
-
-      if (amp > 32767) amp = 32767;
-      if (amp < -32768) amp = -32768;
-      buffer16[i] = amp; 
-      //printf("%d/%d\n", i, numSamples);
-    }
-
-    static float prev = 0;
-    float alpha = 0.995;
-    for (int i = 0; i < numSamples; i++) {
-      float s = buffer16[i];
-      float filtered = s - prev;
-      prev = alpha * s + (1.0 - alpha) * prev;
-
-      if (filtered > 32767) filtered = 32767;
-      if (filtered < -32768) filtered = -32768;
-
-      buffer16[i] = (int16_t)filtered;
-    }
-
-    // Write directly to SD
-    file.write((uint8_t*)buffer16, numSamples * 2);
-
-    bytesTotal += numSamples * 2;
-
-
-  }
-
-  file.close();
-
-  editMonoWAVHeader(SD_MMC, path, 44100 * duration, 44100, 16);
-
-  Serial.println("DONE.");
-
-  return;
-
-}
-
-void setup(){
+void setup() {
 
   Serial.begin(115200);
 
@@ -207,6 +101,8 @@ void setup(){
 
   else {
 
+    xTaskCreatePinnedToCore(audioTask, "Audio", 4096, NULL, 1, NULL, 0);
+
     SDInfo();
 
     Serial.println("Initializing I2S.");
@@ -215,98 +111,92 @@ void setup(){
 
     listDir(SD_MMC, "/", 0);
 
-    filepaths = getDirFilePaths(SD_MMC, "/"); 
+    filepaths = getDirFilePaths(SD_MMC, "/");
 
     Wire.begin(21, 22);  // SDA=21, SCL=22 (can be changed)
     lcd.init();
     lcd.backlight();
 
-    // for(const auto &filepath: filepaths){
-
-    //   clear(lcd);
-
-    //   lcd.setCursor(0,0);
-    //   lcd.print("Normalizing...");
-    //   lcd.setCursor(0,1);
-    //   lcd.print(filepath.c_str());
-
-    //   const char * path = filepath.c_str();
-
-    //   char temp[64];
-
-    //   snprintf(temp, sizeof(temp), "/%s", path);
-
-    //   normalizeMonoWAVFile(SD_MMC, temp, 0.05);
-
-    // }
-
     filepathsIndex = 0;
 
-    lcd.setCursor(0,0);
+    lcd.setCursor(0, 0);
     lcd.print("> ");
     lcd.print(filepaths[filepathsIndex].c_str());
 
-    if(filepathsIndex < filepaths.size() - 1){
+    if (filepathsIndex < filepaths.size() - 1) {
 
-      lcd.setCursor(0,1);
+      lcd.setCursor(0, 1);
       lcd.print(filepaths[filepathsIndex + 1].c_str());
-
     }
-
-
   }
-
-  // printMonoWAVData(SD_MMC, "/dracula.wav");
-
-  // double rms = rootMeanSquare(SD_MMC, "/dracula.wav");
-
-  // Serial.printf("RMS: %.2f\n", rms);
-
 }
 
+// loop() contains the main program flow. This is basically the "menu" for the audio player.
 
-void loop(){
+void loop() {
 
   buttonReturn button = getButtonEvent();
 
-  if(button.event == SINGLE_PRESS){
+  if (button.event == SINGLE_PRESS) {
 
-    switch(button.type){
+    switch (button.type) {
 
       case BUTTON_1:
-        playTest(filepaths[filepathsIndex].c_str());
-        //normalizeTest(filepaths[filepathsIndex].c_str(), 0.02);
-        Serial.println("BUTTON 1"); 
+
+        // On play button press, check that file isn't already selected or played.
+        // If different, we need to create temp string to hold path, and update.
+
+        if (filepathsIndex == currentFileIndex) {
+
+          isPaused = !isPaused;
+
+          Serial.printf("PAUSE TOGGLE. %d\n", isPaused);
+
+        }
+
+        else {
+
+          // Possible fix.
+
+          // i2s_zero_dma_buffer(I2S_NUM_1);
+          // currentFile.close();
+
+          char temp[64];
+
+          snprintf(temp, sizeof(temp), "/%s", filepaths[filepathsIndex].c_str());
+
+          currentFile = SD_MMC.open(temp, "r");
+          currentFileIndex = filepathsIndex;
+
+          isPaused = 0;
+
+          Serial.printf("NEW FILE SELECTED: %s\t%d\t%d\n", temp, currentFileIndex, isPaused);
+        }
+
         break;
-      case BUTTON_3: 
-        if(filepathsIndex < filepaths.size() - 1) filepathsIndex++;
+      case BUTTON_3:
+        if (filepathsIndex < filepaths.size() - 1) filepathsIndex++;
 
         clear(lcd);
 
         break;
       case BUTTON_2:
-        if(filepathsIndex > 0) filepathsIndex--; 
+        if (filepathsIndex > 0) filepathsIndex--;
 
         clear(lcd);
 
         break;
       default: break;
-
     }
 
-    lcd.setCursor(0,0);
+    lcd.setCursor(0, 0);
     lcd.print("> ");
     lcd.print(filepaths[filepathsIndex].c_str());
 
-    if(filepathsIndex < filepaths.size() - 1){
+    if (filepathsIndex < filepaths.size() - 1) {
 
-      lcd.setCursor(0,1);
+      lcd.setCursor(0, 1);
       lcd.print(filepaths[filepathsIndex + 1].c_str());
-
     }
-
-
   }
-
-
 }
