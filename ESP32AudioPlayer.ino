@@ -29,6 +29,8 @@ uint16_t buffer[512];
 int16_t *samples;
 size_t sampleCount;
 
+double amplitude = 1.0;
+
 // Attatch audio playback to seperate core to eliminate audio loss when reading button events.
 
 void audioTask(void *parameters) {
@@ -39,9 +41,25 @@ void audioTask(void *parameters) {
       bytes_read = currentFile.read((uint8_t *)buffer, sizeof(buffer));
 
       if (bytes_read > 0) {
+
+        samples = (int16_t*)buffer;
+
+        sampleCount = bytes_read / 2;
+
+        for(int i=0;i<sampleCount;i++){
+
+          samples[i] *= (0.4 * amplitude);
+
+        }
+
         i2s_write(I2S_NUM_1, buffer, bytes_read, &bytes_written, portMAX_DELAY);
-      } else {
+
+      } 
+      
+      else {
+
         currentFile.close();
+
       }
 
     }
@@ -134,6 +152,12 @@ void setup() {
 // loop() contains the main program flow. This is basically the "menu" for the audio player.
 
 void loop() {
+
+  // Potentiometer on GPIO34. Divide by 400 to get values 0.0 - 10.0 for volume.
+
+  amplitude = (analogRead(35) / 400);
+
+  //Serial.println(amplitude);
 
   buttonReturn button = getButtonEvent();
 
