@@ -1,10 +1,19 @@
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+//#include <LiquidCrystal_I2C.h>
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_HEIGHT 32
+#define SCREEN_WIDTH 128
+#define OLED_RESET -1
 
 #include "mono_file.h"
 #include "sd_read_write.h"
 #include "i2s.h"
 #include "button.h"
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // This vector is used to traverse files in given directory. Used for selecting audio.
 
@@ -19,7 +28,7 @@ int currentFileIndex = -1;
 
 File currentFile;
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+int isFileSelection = 0;
 
 // audioTask specific variables. Copy of variables in playMonoWAVFile() in mono_file.cpp.
 
@@ -31,7 +40,14 @@ size_t sampleCount;
 
 double amplitude = 1.0;
 
-// Attatch audio playback to seperate core to eliminate audio loss when reading button events.
+// I2C screen-specific variables.
+
+int16_t textX;
+int16_t textWidth;
+unsigned long lastFrame = 0;
+const int frameDelay = 30;
+
+// Attach audio playback to seperate core to eliminate audio loss when reading button events.
 
 void audioTask(void *parameters) {
   while (true) {
@@ -55,12 +71,6 @@ void audioTask(void *parameters) {
         i2s_write(I2S_NUM_1, buffer, bytes_read, &bytes_written, portMAX_DELAY);
 
       } 
-      
-      else {
-
-        currentFile.close();
-
-      }
 
     }
 
@@ -69,31 +79,11 @@ void audioTask(void *parameters) {
 
 }
 
-// Quick function to "clear" lcd by overwriting with spaces.
-// Used when moving through filepaths.
-
-void clear(LiquidCrystal_I2C &lcd) {
-
-  lcd.setCursor(0, 0);
-  lcd.print("                ");
-  lcd.setCursor(0, 1);
-  lcd.print("                ");
-  lcd.setCursor(0, 0);
-
-}
-
 // This is a helper function to normalize audio files to some level, i.e. 0.05. EXTREMELY SLOW.
 
 void normalizeAllFiles(std::vector<String> filepaths, double normalization) {
 
   for (const auto &filepath : filepaths) {
-
-    clear(lcd);
-
-    lcd.setCursor(0, 0);
-    lcd.print("Normalizing...");
-    lcd.setCursor(0, 1);
-    lcd.print(filepath.c_str());
 
     const char *path = filepath.c_str();
 
@@ -131,21 +121,33 @@ void setup() {
 
     filepaths = getDirFilePaths(SD_MMC, "/");
 
-    Wire.begin(21, 22);  // SDA=21, SCL=22 (can be changed)
-    lcd.init();
-    lcd.backlight();
+    Wire.begin(21, 22);
 
-    filepathsIndex = 0;
+    
 
-    lcd.setCursor(0, 0);
-    lcd.print("> ");
-    lcd.print(filepaths[filepathsIndex].c_str());
-
-    if (filepathsIndex < filepaths.size() - 1) {
-
-      lcd.setCursor(0, 1);
-      lcd.print(filepaths[filepathsIndex + 1].c_str());
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+    
+      Serial.println("SSD1306 allocation failed");
+      
     }
+
+    else{
+
+      delay(2000);
+      display.clearDisplay();
+      display.setTextWrap(false);
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      
+      textWidth = strlen(filepaths[filepathsIndex].c_str()) * 6;
+      textX = SCREEN_WIDTH;
+
+      display.print("Now Playing");
+      display.setCursor(0,16);
+      display.print(filepaths[filepathsIndex].c_str());
+
+    }
+
   }
 }
 
@@ -163,64 +165,60 @@ void loop() {
 
   if (button.event == SINGLE_PRESS) {
 
-    switch (button.type) {
+    if(button.type == BUTTON_1){
 
-      case BUTTON_1:
+      isPaused = !isPaused;
 
-        // On play button press, check that file isn't already selected or played.
-        // If different, we need to create temp string to hold path, and update.
+    }
 
-        if (filepathsIndex == currentFileIndex) {
+    if(button.type == BUTTON_2 || button.type == BUTTON_3){
 
-          isPaused = !isPaused;
+      if(button.type == BUTTON_2){
 
-          Serial.printf("PAUSE TOGGLE. %d\n", isPaused);
-
-        }
-
-        else {
-
-          // Possible fix.
-
-          // i2s_zero_dma_buffer(I2S_NUM_1);
-          // currentFile.close();
-
-          char temp[64];
-
-          snprintf(temp, sizeof(temp), "/%s", filepaths[filepathsIndex].c_str());
-
-          currentFile = SD_MMC.open(temp, "r");
-          currentFileIndex = filepathsIndex;
-
-          isPaused = 0;
-
-          Serial.printf("NEW FILE SELECTED: %s\t%d\t%d\n", temp, currentFileIndex, isPaused);
-        }
-
-        break;
-      case BUTTON_3:
-        if (filepathsIndex < filepaths.size() - 1) filepathsIndex++;
-
-        clear(lcd);
-
-        break;
-      case BUTTON_2:
         if (filepathsIndex > 0) filepathsIndex--;
 
-        clear(lcd);
+      }
 
-        break;
-      default: break;
+      if(button.type == BUTTON_3){
+
+        if (filepathsIndex < filepaths.size() - 1) filepathsIndex++;
+
+      }
+
+      char temp[64];
+
+      snprintf(temp, sizeof(temp), "/%s", filepaths[filepathsIndex].c_str());
+
+      currentFile = SD_MMC.open(temp, "r");
+      currentFileIndex = filepathsIndex;
+
+      isPaused = 0;
+
     }
 
-    lcd.setCursor(0, 0);
-    lcd.print("> ");
-    lcd.print(filepaths[filepathsIndex].c_str());
+  }
 
-    if (filepathsIndex < filepaths.size() - 1) {
+  if(!isPaused){
 
-      lcd.setCursor(0, 1);
-      lcd.print(filepaths[filepathsIndex + 1].c_str());
+    unsigned long now = millis();
+    if (now - lastFrame >= frameDelay) {
+      lastFrame = now;
+
+      display.clearDisplay();
+
+      display.setCursor(0,0);
+      display.print("Now Playing");
+
+      display.setCursor(textX, 16);
+      display.print(filepaths[filepathsIndex].c_str());
+      display.display();
+
+      textX--;
+      if (textX < -textWidth) {
+        textX = SCREEN_WIDTH - 10;
+      }
     }
   }
+
 }
+
