@@ -20,15 +20,32 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 std::vector<String> filepaths;
 int filepathsIndex;
 
+// Vector to store file size and duration for display.
+
+std::vector<int> fileDuration;
+
 int isPaused = 1;
 
 // Seperate from filepathsIndex. When a file is played, this is set, then compared against filepathsIndex to check if selection has changed.
+
+
 
 int currentFileIndex = -1;
 
 File currentFile;
 
 int isFileSelection = 0;
+
+volatile int seconds;
+volatile int minutes;
+SemaphoreHandle_t timeMutex;
+uint32_t elapsedSeconds;
+uint32_t totalSamples;
+
+char fileDur[32];
+
+int fileMinutes;
+int fileSeconds;
 
 // audioTask specific variables. Copy of variables in playMonoWAVFile() in mono_file.cpp.
 
@@ -50,6 +67,11 @@ const int frameDelay = 30;
 // Attach audio playback to seperate core to eliminate audio loss when reading button events.
 
 void audioTask(void *parameters) {
+
+  totalSamples = 0;
+  elapsedSeconds = 0;
+  uint32_t lastSecondSamples = 0;
+
   while (true) {
 
     if (!isPaused && currentFile && currentFile.available()) {
@@ -61,6 +83,22 @@ void audioTask(void *parameters) {
         samples = (int16_t*)buffer;
 
         sampleCount = bytes_read / 2;
+
+        totalSamples += sampleCount;
+
+        elapsedSeconds = totalSamples / 44100;
+
+        if(elapsedSeconds != seconds){
+
+          xSemaphoreTake(timeMutex, portMAX_DELAY);
+
+          seconds = elapsedSeconds;
+
+          minutes = seconds / 60;
+
+          xSemaphoreGive(timeMutex);
+
+        }
 
         for(int i=0;i<sampleCount;i++){
 
@@ -110,6 +148,8 @@ void setup() {
   else {
 
     xTaskCreatePinnedToCore(audioTask, "Audio", 4096, NULL, 1, NULL, 0);
+
+    timeMutex = xSemaphoreCreateMutex();
 
     SDInfo();
 
@@ -185,9 +225,31 @@ void loop() {
 
       }
 
+      display.clearDisplay();
+
       char temp[64];
 
       snprintf(temp, sizeof(temp), "/%s", filepaths[filepathsIndex].c_str());
+
+      fileDuration = printMonoWAVData(SD_MMC, temp);
+
+      totalSamples = 0;
+
+      xSemaphoreTake(timeMutex, portMAX_DELAY);
+
+      totalSamples = 0;
+      elapsedSeconds = 0;
+      seconds = 0;
+      minutes = 0;
+
+      xSemaphoreGive(timeMutex);
+
+      fileMinutes = fileDuration[0] / 60;
+      fileSeconds = fileDuration[0] % 60;
+
+      sprintf(fileDur, fileSeconds > 9 ? "%d:%-2d" : "%d:0%d", fileMinutes, fileSeconds);
+
+      Serial.printf("%d %d\n%d:%d", fileDuration[0], fileDuration[1], fileMinutes, fileSeconds);
 
       currentFile = SD_MMC.open(temp, "r");
       currentFileIndex = filepathsIndex;
@@ -205,9 +267,23 @@ void loop() {
       lastFrame = now;
 
       display.clearDisplay();
+      delay(50);
 
       display.setCursor(0,0);
       display.print("Now Playing");
+
+      display.setCursor(76, 0);
+      char timeDisplay[32];
+
+      xSemaphoreTake(timeMutex, portMAX_DELAY);
+
+      int s = seconds;
+      int m = minutes;
+
+      xSemaphoreGive(timeMutex);
+
+      sprintf(timeDisplay, (s % 60) > 9 ? "%d:%-2d|%s" : "%d:0%d|%s", m, s % 60, fileDur);
+      display.print(timeDisplay);
 
       display.setCursor(textX, 16);
       display.print(filepaths[filepathsIndex].c_str());

@@ -169,21 +169,21 @@ void writeSineWave(fs::FS &fs, const char * path, float freq, float duration){
   fs::FS &fs - File system. Since we are using on-board SD card using SD_MMC.h, it should always be SD_MMC.
   const char * path - Name of created file. Root directory MUST be included, i.e. "/test.wav" and not "test.wav".
 
-  return - This function does not return. Check serial monitor for output.
+  return - This function returns the duration of a file in seconds, rounded.
 
 */
 
-void printMonoWAVData(fs::FS &fs, const char * path){
+std::vector<int> printMonoWAVData(fs::FS &fs, const char * path){
 
   File file = fs.open(path, FILE_READ);
 
-  if(!file){
+  // if(!file){
 
-    Serial.printf("%s could not be opened.\n", path);
+  //   Serial.printf("%s could not be opened.\n", path);
 
-    return;
+  //   return NULL;
 
-  }
+  // }
 
   uint16_t numChannels;
   uint32_t sampleRate;
@@ -202,6 +202,8 @@ void printMonoWAVData(fs::FS &fs, const char * path){
   Serial.printf("\nFILE INFO:\n\nNUM CHANNELS: %d\nSAMPLE RATE: %d\nDuration: %.2fs\n\n", numChannels, sampleRate, (double) (fileSize / sampleRate / 2));
 
   file.close();
+
+  return {(int)(fileSize / sampleRate / 2), (int)(fileSize / 2)};
 
 }
 
